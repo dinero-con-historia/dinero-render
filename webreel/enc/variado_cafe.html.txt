@@ -1,0 +1,245 @@
+<!doctype html><meta charset=¨utf-8¨>
+<style>
+html,body{margin:0;background:#04060f;overflow:hidden}
+#stage{position:relative;width:720px;height:1280px;overflow:hidden;font-family:Outfit,Figtree,Inter,sans-serif;color:#fff}
+.a{position:absolute;left:0;top:0}
+#cam{width:720px;height:1280px;transform-origin:360px 760px}
+.pill{position:absolute;padding:9px 22px;border-radius:999px;font-weight:800;font-size:30px;white-space:nowrap;transform:translate(-50%,-50%)}
+#subs{top:190px;width:720px;text-align:center;font-weight:800;font-size:56px;line-height:1.3;letter-spacing:.2px}
+.w{display:inline-block;margin:0 8px;padding:0 6px;text-shadow:0 0 10px rgba(150,95,255,.95),0 0 26px rgba(125,70,240,.75),0 0 52px rgba(100,50,220,.5),0 3px 6px rgba(15,0,40,.55)}
+</style>
+<div id=¨stage¨>
+ <div id=¨bg¨ class=¨a¨ style=¨width:720px;height:1280px¨></div>
+ <div id=¨sets¨ class=¨a¨ style=¨width:720px;height:1280px;transform-origin:360px 760px¨></div>
+ <canvas id=¨parts¨ class=¨a¨ width=¨720¨ height=¨1280¨></canvas>
+ <div id=¨cam¨ class=¨a¨><div id=¨world¨ class=¨a¨ style=¨width:720px;height:1280px¨></div></div>
+ <div id=¨fx¨ class=¨a¨ style=¨width:720px;height:1280px;pointer-events:none¨></div>
+ <div class=¨a¨ style=¨width:720px;height:1280px;background:radial-gradient(ellipse at 50% 52%,rgba(0,0,0,0) 48%,rgba(0,0,10,.5) 100%);pointer-events:none¨></div>
+ <canvas id=¨grain¨ class=¨a¨ width=¨240¨ height=¨427¨ style=¨width:720px;height:1280px;opacity:.09;mix-blend-mode:overlay;pointer-events:none¨></canvas>
+ <div id=¨subs¨ class=¨a¨></div>
+ <div id=¨foot¨ class=¨a¨ style=¨top:1180px;width:720px;text-align:center;font-size:21px;font-weight:600;color:rgba(255,255,255,.7);letter-spacing:.3px;line-height:1.5¨></div>
+</div>
+<script>
+// ================= MOTOR (genérico) =================
+const W=720,H=1280;
+const cl=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const E={lin:t=>t,outC:t=>1-Math.pow(1-t,3),inC:t=>t*t*t,inQ:t=>t*t,io:t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,
+ outB:t=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2)},
+ outE:t=>t<=0?0:t>=1?1:Math.pow(2,-10*t)*Math.sin((t*10-.75)*(2*Math.PI/3))+1};
+const ramp=(t,a,b,f=E.outC)=>f(cl((t-a)/(b-a)));
+const lerp=(a,b,k)=>a+(b-a)*k;
+const mix=(c1,c2,k)=>c1.map((v,i)=>Math.round(lerp(v,c2[i],k)));
+function rnd(s){s=Math.sin(s*127.1+311.7)*43758.5453;return s-Math.floor(s)}
+const norm=s=>s.toLowerCase().replace(/[^a-záéíóúñü]/g,'');
+const WORDS=[],CHUNKS=[];
+let VI=0;
+function autoTime(text,start){ // con voz real: usa los tiempos de Edge-TTS (window.VOICE); sin voz: estimados
+ const ws=text.split(/¦s+/);let t=start,first=WORDS.length;
+ if(window.VOICE){for(const w of ws){const v=window.VOICE[VI++];if(!v)throw 'VOICE corta';WORDS.push([w,v[1],v[2]]);t=v[2]}}
+ else for(const w of ws){const syl=Math.max(1,(w.toLowerCase().match(/[aeiouáéíóú]+/g)||['a']).length);const d=.09+.12*syl;WORDS.push([w,t,t+d]);t+=d+(/[,:;]$/.test(w)?.28:0)+(/[.?!]$/.test(w)?.12:0)}
+ let i=first;while(i<WORDS.length){let j=i,n=0;while(j<WORDS.length&&n<3){n++;if(/[.,:;?!]$/.test(WORDS[j][0]))break;j++}CHUNKS.push([i,Math.min(j,WORDS.length-1)]);i=Math.min(j,WORDS.length-1)+1}
+ return t}
+function cue(w,n=0){let k=0;for(const x of WORDS){if(norm(x[0])==norm(w)){if(k==n)return x[1];k++}}throw 'cue '+w}
+const EV=[];const ev=(t,type,o={})=>EV.push(Object.assign({t,type},o));
+const world=document.getElementById('world'),sets=document.getElementById('sets'),fx=document.getElementById('fx');
+function el(html,parent=world){const d=document.createElement('div');d.className='a';d.innerHTML=html;parent.appendChild(d);return d}
+function tf(e,x,y,s=1,r=0,op=1,extra=''){e.style.transform=`translate(${x}px,${y}px) rotate(${r}deg) scale(${s}) ${extra}`;e.style.opacity=op;e.style.display=op<=0.003?'none':'block'}
+const gr=document.getElementById('grain'),gx=gr.getContext('2d'),gi=gx.createImageData(240,427);
+function grainAt(t){const f=Math.floor(t*24);for(let i=0;i<gi.data.length;i+=4){const v=(Math.sin((i+f*977)*12.9898)*43758.5453%1+1)%1*255;gi.data[i]=gi.data[i+1]=gi.data[i+2]=v;gi.data[i+3]=255}gx.putImageData(gi,0,0)}
+const pc=document.getElementById('parts').getContext('2d');
+function dust(t,col){pc.clearRect(0,0,W,H);for(let i=0;i<14;i++){const sz=1.2+rnd(i)*1.6,sp=.25+rnd(i+9)*.5;const x=(rnd(i+3)*W+Math.sin(t*sp+i)*22+t*(4+i%3*3))%W,y=((rnd(i+5)*H*.8-t*(10+i%4*5))%(H*.8)+H*.8)%(H*.8)+60;
+ pc.fillStyle=`rgba(${col},${.2+.28*rnd(i+7)})`;pc.beginPath();pc.arc(x,y,sz,0,6.283);pc.fill()}}
+let ACC=[111,211,255];
+const subs=document.getElementById('subs');
+function subsAt(t){let idx=-1;for(let i=0;i<WORDS.length;i++){if(WORDS[i][1]<=t)idx=i;else break}
+ if(idx<0||t>WORDS[idx][2]+.55){subs.innerHTML='';return}
+ let ch=CHUNKS.find(c=>idx>=c[0]&&idx<=c[1]);if(!ch){subs.innerHTML='';return}
+ const t0=WORDS[ch[0]][1],a=ramp(t,t0,t0+.14),h=[],c=ACC.join(',');
+ for(let i=ch[0];i<=ch[1];i++){const sp=i<=idx,ac=i==idx&&t<WORDS[i][2]+.1;
+  h.push(`<span class=¨w¨ style=¨color:${sp?'#fff':'rgba(205,190,255,.42)'};${ac?'transform:scale(1.06);':''}${sp?'':'text-shadow:0 0 14px rgba(120,70,240,.55);'}¨>${WORDS[i][0]}</span>`)}
+ subs.style.opacity=a;subs.style.transform=`translateY(${(1-a)*14}px)`;subs.innerHTML=h.join('')}
+function camAt(CAM,t){let a=CAM[0],b=CAM[CAM.length-1];for(let i=0;i<CAM.length-1;i++){if(t>=CAM[i][0]&&t<=CAM[i+1][0]){a=CAM[i];b=CAM[i+1];break}}
+ const k=a==b?0:E.io(cl((t-a[0])/(b[0]-a[0])));return [0,1,2,3,4].map(j=>j==0?0:lerp(a[j],b[j],k))}
+// ---- personaje (vector plano, con expresión y brazos por cinemática inversa)
+function ik(S,T,l1,l2,dir){let dx=T[0]-S[0],dy=T[1]-S[1],d=Math.min(Math.hypot(dx,dy),l1+l2-.01);const a=Math.atan2(dy,dx);
+ const c=(l1*l1+d*d-l2*l2)/(2*l1*d),ang=Math.acos(cl(c,-1,1));const e=a+dir*ang;return [S[0]+Math.cos(e)*l1,S[1]+Math.sin(e)*l1,S[0]+Math.cos(a)*d,S[1]+Math.sin(a)*d]}
+function lia(p){const u=p.uid||'x',sk=p.skin||'#e0a07e',skd=p.skinD||'#c98462',hair=p.hair||'#4a2a9a',sh=p.shirt||'#4fb7d9',shd=p.shirtD||'#3b97b8';
+ const op=cl(p.eyes??1),lid=(1-op)*46,lx=(p.look?.[0]||0),ly=(p.look?.[1]||0),brow=p.brow||0,bt=p.blink||0;
+ const L=ik([92,380],p.handL||[78,560],100,90,1),R=ik([308,380],p.handR||[322,560],100,90,-1);
+ const arm=(A,sc)=>`<path d=¨M${A[0]-0} ${A[1]} L${A[0]} ${A[1]}¨ /><line x1=¨${sc[0]}¨ y1=¨${sc[1]}¨ x2=¨${A[0]}¨ y2=¨${A[1]}¨ stroke=¨${sh}¨ stroke-width=¨44¨ stroke-linecap=¨round¨/><line x1=¨${A[0]}¨ y1=¨${A[1]}¨ x2=¨${A[2]}¨ y2=¨${A[3]}¨ stroke=¨${sk}¨ stroke-width=¨34¨ stroke-linecap=¨round¨/><circle cx=¨${A[2]}¨ cy=¨${A[3]}¨ r=¨21¨ fill=¨${sk}¨/>`;
+ let mouth='';const m=p.mouth||'neutral',mo=p.mo??0;
+ if(m=='neutral')mouth=`<path d=¨M180 268 Q200 ${274+mo*0} 220 268¨ stroke=¨#7a3b3b¨ stroke-width=¨6¨ fill=¨none¨ stroke-linecap=¨round¨/>`;
+ else if(m=='yawn')mouth=`<ellipse cx=¨200¨ cy=¨${268+mo*10}¨ rx=¨${14+mo*14}¨ ry=¨${6+mo*32}¨ fill=¨#5a1f2b¨/><ellipse cx=¨200¨ cy=¨${268+mo*26}¨ rx=¨${10+mo*8}¨ ry=¨${3+mo*13}¨ fill=¨#d9657a¨/>`;
+ else if(m=='smile')mouth=`<path d=¨M172 258 Q200 ${288} 228 258¨ stroke=¨#7a3b3b¨ stroke-width=¨6¨ fill=¨none¨ stroke-linecap=¨round¨/>`;
+ else if(m=='grin')mouth=`<path d=¨M166 256 Q200 312 234 256 Z¨ fill=¨#5a1f2b¨/><path d=¨M172 258 Q200 276 228 258 L226 262 Q200 280 174 262Z¨ fill=¨#fff¨/>`;
+ else if(m=='o')mouth=`<ellipse cx=¨200¨ cy=¨270¨ rx=¨11¨ ry=¨${11+mo*5}¨ fill=¨#5a1f2b¨/>`;
+ const eye=(cx)=>`<clipPath id=¨ce${u}${cx}¨><ellipse cx=¨${cx}¨ cy=¨214¨ rx=¨21¨ ry=¨24¨/></clipPath><ellipse cx=¨${cx}¨ cy=¨214¨ rx=¨21¨ ry=¨24¨ fill=¨#fff¨/><circle cx=¨${cx+lx*8}¨ cy=¨${214+ly*7}¨ r=¨10¨ fill=¨#241522¨/><circle cx=¨${cx+lx*8-3}¨ cy=¨${214+ly*7-4}¨ r=¨3.4¨ fill=¨#fff¨/><g clip-path=¨url(#ce${u}${cx})¨><rect x=¨${cx-24}¨ y=¨${188-2}¨ width=¨48¨ height=¨${Math.max(0,Math.min(50,lid+bt*46))}¨ fill=¨${sk}¨/></g><ellipse cx=¨${cx}¨ cy=¨214¨ rx=¨21¨ ry=¨24¨ fill=¨none¨ stroke=¨rgba(0,0,0,.18)¨ stroke-width=¨2¨/>`;
+ const bw=(cx,sg)=>`<path d=¨M${cx-22} ${186-brow*10+sg*brow*-6} Q${cx} ${176-brow*12} ${cx+22} ${186-brow*10-sg*brow*-6}¨ stroke=¨${hair}¨ stroke-width=¨7¨ fill=¨none¨ stroke-linecap=¨round¨/>`;
+ const cup=p.cup?`<g transform=¨translate(${R[2]} ${R[3]}) rotate(${p.cupTilt||0})¨><rect x=¨-30¨ y=¨-58¨ width=¨60¨ height=¨64¨ rx=¨10¨ fill=¨${p.cupCol||'#f5efe6'}¨/><path d=¨M30 -44 q26 6 0 34¨ stroke=¨${p.cupCol||'#f5efe6'}¨ stroke-width=¨9¨ fill=¨none¨/><rect x=¨-24¨ y=¨-52¨ width=¨48¨ height=¨12¨ rx=¨6¨ fill=¨#5a3a24¨/><circle cx=¨0¨ cy=¨0¨ r=¨21¨ fill=¨${sk}¨ transform=¨translate(0 6)¨/><circle cx=¨-16¨ cy=¨-8¨ r=¨9¨ fill=¨${sk}¨/></g>`:'';
+ return `<svg width=¨400¨ height=¨640¨ viewBox=¨0 0 400 640¨ style=¨overflow:visible¨>
+ <path d=¨M96 190 Q92 330 112 372 L288 372 Q310 330 304 190 Q300 90 200 88 Q100 90 96 190Z¨ fill=¨${hair}¨/>
+ <defs><linearGradient id=¨sg${u}¨ x1=¨0¨ x2=¨1¨><stop offset=¨0¨ stop-color=¨${sh}¨/><stop offset=¨1¨ stop-color=¨${shd}¨/></linearGradient><radialGradient id=¨hg${u}¨ cx=¨.4¨ cy=¨.3¨><stop offset=¨0¨ stop-color=¨${p.skinL||¨#f2bb98¨}¨/><stop offset=¨1¨ stop-color=¨${sk}¨/></radialGradient></defs><path d=¨M52 640 L52 430 Q52 366 126 354 L274 354 Q348 366 348 430 L348 640Z¨ fill=¨url(#sg${u})¨/><path d=¨M150 354 Q200 392 250 354Z¨ fill=¨${skd}¨/>
+ <rect x=¨176¨ y=¨286¨ width=¨48¨ height=¨84¨ rx=¨20¨ fill=¨${skd}¨/>
+ ${arm(L,[92,380])}${arm(R,[308,380])}
+ <ellipse cx=¨119¨ cy=¨222¨ rx=¨15¨ ry=¨20¨ fill=¨${sk}¨/><ellipse cx=¨281¨ cy=¨222¨ rx=¨15¨ ry=¨20¨ fill=¨${sk}¨/>
+ <ellipse cx=¨200¨ cy=¨214¨ rx=¨84¨ ry=¨92¨ fill=¨url(#hg${u})¨/>
+ <path d=¨M114 196 Q120 108 200 104 Q282 108 286 196 Q252 146 200 154 Q148 146 114 196Z¨ fill=¨${hair}¨/>
+ ${eye(163)}${eye(237)}${bw(163,1)}${bw(237,-1)}
+ <circle cx=¨140¨ cy=¨250¨ r=¨15¨ fill=¨#ff7c86¨ opacity=¨${.18+(p.blush||0)*.4}¨/><circle cx=¨260¨ cy=¨250¨ r=¨15¨ fill=¨#ff7c86¨ opacity=¨${.18+(p.blush||0)*.4}¨/>
+ ${mouth}${cup}</svg>`}
+</script>
+
+<script>
+// ================= ESCENA: ¿Por qué el café te despierta? (Variado / ESCÁNER) =================
+let T_=autoTime(¨Tu cerebro acumula sueño durante todo el día.¨,.25);
+T_=autoTime(¨Ese sueño es una molécula: adenosina, que encaja en tus neuronas como una llave.¨,T_+.4);
+T_=autoTime(¨El café ocupa esas cerraduras antes que ella,¨,T_+.4);
+T_=autoTime(¨y de pronto, sientes que despiertas.¨,T_+.15);
+const DUR=T_+1.9;
+const B1=cue('Ese')-.12,B3=cue('café')-.12,B4=cue('pronto')-.1,B5=cue('sientes')-.12;
+const blink=(t,per,off)=>{const b=((t+off)%per);return b<.16?Math.sin(b/.16*Math.PI):0};
+// ---------- escenarios (el fondo es el lugar de lo que se narra)
+sets.innerHTML=`
+<div id=¨set1¨ class=¨a¨ style=¨left:-20px;top:-40px;width:760px;height:1360px;overflow:hidden¨>
+ <div class=¨a¨ style=¨width:760px;height:1360px;background:radial-gradient(ellipse at 52% 46%,#31235f 0%,#180f3a 42%,#0a0616 100%)¨></div>
+ <div class=¨a¨ style=¨left:420px;top:90px;width:300px;height:520px;border-radius:14px;background:linear-gradient(180deg,#6a58b8,#3d2f80);opacity:.55;filter:blur(2px)¨></div>
+ <div class=¨a¨ style=¨left:420px;top:90px;width:300px;height:520px;border-radius:14px;background:linear-gradient(90deg,transparent 48%,rgba(14,8,34,.8) 48% 52%,transparent 52%),linear-gradient(0deg,transparent 48%,rgba(14,8,34,.8) 48% 52%,transparent 52%)¨></div>
+ <div class=¨a¨ style=¨left:-60px;top:1040px;width:880px;height:330px;background:linear-gradient(180deg,#2b1f55,#0d0820);border-top:2px solid rgba(190,170,255,.18)¨></div>
+ <div class=¨a¨ style=¨left:470px;top:990px;width:240px;height:150px;border-radius:12px 12px 4px 4px;background:#0a0618;box-shadow:0 0 60px rgba(150,110,255,.35);filter:blur(1.5px)¨></div>
+ <div class=¨a¨ style=¨left:0;top:0;width:760px;height:1360px;background:radial-gradient(ellipse at 70% 30%,rgba(170,140,255,.2),rgba(0,0,0,0) 60%)¨></div>
+</div>
+<div id=¨set2¨ class=¨a¨ style=¨left:-20px;top:-40px;width:760px;height:1360px;overflow:hidden¨>
+ <div class=¨a¨ style=¨width:760px;height:1360px;background:radial-gradient(ellipse at 50% 48%,#3a2580 0%,#1d1250 40%,#09051c 100%)¨></div>
+ <div id=¨tis¨ class=¨a¨ style=¨width:760px;height:1360px¨></div>
+ <div class=¨a¨ style=¨left:0;top:0;width:760px;height:1360px;background:radial-gradient(ellipse at 50% 50%,rgba(170,140,255,.18),rgba(0,0,0,0) 55%)¨></div>
+</div>
+<div id=¨set4¨ class=¨a¨ style=¨left:-20px;top:-40px;width:760px;height:1360px;overflow:hidden¨>
+ <div class=¨a¨ style=¨width:760px;height:1360px;background:radial-gradient(ellipse at 50% 46%,#7e52c8 0%,#472590 38%,#150a34 100%)¨></div>
+ <div id=¨rays¨ class=¨a¨ style=¨left:-300px;top:-120px;width:1360px;height:1360px;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(230,210,255,.14) 0 9deg,rgba(255,255,255,0) 9deg 22deg);-webkit-mask-image:radial-gradient(circle at 50% 50%,#000 0,transparent 62%)¨></div>
+ <div class=¨a¨ style=¨left:60px;top:300px;width:640px;height:640px;background:radial-gradient(circle,rgba(255,225,245,.5),rgba(255,225,245,0) 62%);mix-blend-mode:screen¨></div>
+</div>`;
+// tejido: formas grandes y suaves de la escena ¨dentro del cerebro¨ (no burbujas sueltas)
+document.getElementById('tis').innerHTML=[[140,260,420,300,'#6a46d8',.26],[560,520,360,240,'#8a5fe0',.22],[120,900,400,280,'#7a3fd8',.24],[600,1120,380,260,'#5a46c8',.22],[380,640,300,200,'#4a2fb8',.3]].map((o,i)=>`<div class=¨tis a¨ data-i=¨${i}¨ style=¨left:${o[0]-o[2]/2}px;top:${o[1]-o[3]/2}px;width:${o[2]}px;height:${o[3]}px;border-radius:50%;background:radial-gradient(ellipse,${o[4]},rgba(0,0,0,0) 70%);opacity:${o[5]};filter:blur(14px)¨></div>`).join('')+
+ `<svg class=¨a¨ width=¨760¨ height=¨1360¨ style=¨opacity:.35¨><g stroke=¨#8a7bff¨ stroke-width=¨2.5¨ fill=¨none¨ stroke-linecap=¨round¨><path d=¨M0 330 Q140 290 200 400 T330 470¨/><path d=¨M760 760 Q620 700 560 800 T440 880¨/><path d=¨M0 1100 Q120 1180 250 1100¨/><path d=¨M760 1200 Q660 1260 560 1180¨/></g><g fill=¨#a89bff¨><circle cx=¨200¨ cy=¨400¨ r=¨6¨/><circle cx=¨560¨ cy=¨800¨ r=¨6¨/><circle cx=¨250¨ cy=¨1100¨ r=¨5¨/><circle cx=¨560¨ cy=¨1180¨ r=¨5¨/></g></svg>`;
+// ---------- Lía (personaje principal)
+const liaMain=el(''),liaEnd=el(''),liaIn=el('');
+const porthole=el(`<div style=¨width:290px;height:290px;border-radius:50%;overflow:hidden;border:6px solid rgba(255,255,255,.85);box-shadow:0 14px 40px rgba(0,0,0,.45);background:radial-gradient(circle at 50% 35%,#ffd2a0,#e98a5a 70%)¨><div id=¨phi¨ style=¨position:absolute;left:0;top:0;width:290px;height:290px;overflow:hidden¨></div></div>`);
+const phi=porthole.querySelector('#phi');phi.appendChild(liaIn);
+// ---------- gadgets de S1
+const clock=el(`<svg width=¨150¨ height=¨150¨ viewBox=¨0 0 150 150¨><circle cx=¨75¨ cy=¨75¨ r=¨68¨ fill=¨#eaf1fa¨ stroke=¨#9fb4cc¨ stroke-width=¨7¨/>${[...Array(12)].map((_,i)=>`<line x1=¨75¨ y1=¨16¨ x2=¨75¨ y2=¨${i%3==0?27:22}¨ stroke=¨#5c7392¨ stroke-width=¨${i%3==0?5:3}¨ transform=¨rotate(${i*30} 75 75)¨/>`).join('')}<line id=¨hm¨ x1=¨75¨ y1=¨75¨ x2=¨75¨ y2=¨30¨ stroke=¨#2c3f58¨ stroke-width=¨5¨ stroke-linecap=¨round¨/><line id=¨hh¨ x1=¨75¨ y1=¨75¨ x2=¨75¨ y2=¨44¨ stroke=¨#2c3f58¨ stroke-width=¨8¨ stroke-linecap=¨round¨/><circle cx=¨75¨ cy=¨75¨ r=¨7¨ fill=¨#2c3f58¨/></svg>`);
+const hm=clock.querySelector('#hm'),hh=clock.querySelector('#hh');
+const clockPill=el(`<div class=¨pill¨ style=¨background:rgba(255,255,255,.14);border:3px solid rgba(255,255,255,.4);font-size:26px¨>TODO EL DÍA</div>`);
+const gauge=el(`<div style=¨width:70px;height:260px;border-radius:35px;background:rgba(255,255,255,.12);border:4px solid rgba(255,255,255,.45);overflow:hidden;position:relative¨><div id=¨gf¨ style=¨position:absolute;left:0;bottom:0;width:70px;height:0;background:linear-gradient(0deg,#4f6bd8,#8fb0ff)¨></div></div><div class=¨pill¨ style=¨left:35px;top:296px;background:rgba(111,150,255,.25);border:3px solid rgba(150,180,255,.8);font-size:24px¨>SUEÑO</div>`);
+const gf=gauge.querySelector('#gf');
+const bubble=el(`<svg width=¨260¨ height=¨300¨ viewBox=¨0 0 260 300¨ style=¨overflow:visible¨><circle cx=¨150¨ cy=¨110¨ r=¨100¨ fill=¨rgba(255,255,255,.93)¨/><circle cx=¨52¨ cy=¨226¨ r=¨20¨ fill=¨rgba(255,255,255,.9)¨/><circle cx=¨22¨ cy=¨268¨ r=¨12¨ fill=¨rgba(255,255,255,.88)¨/><circle cx=¨2¨ cy=¨296¨ r=¨7¨ fill=¨rgba(255,255,255,.85)¨/>
+<g transform=¨translate(86 62)¨><path d=¨M65 14 C40 0 8 14 10 44 C-2 56 8 82 30 82 C38 100 62 100 65 90 C68 100 92 100 100 82 C122 82 132 56 120 44 C122 14 90 0 65 14Z¨ fill=¨#ff9db1¨ stroke=¨#e86f8b¨ stroke-width=¨4¨/><path d=¨M65 16 V90 M32 40 Q48 52 38 68 M98 40 Q82 52 92 68¨ stroke=¨#e86f8b¨ stroke-width=¨3.5¨ fill=¨none¨/><path d=¨M42 54 q8 8 16 0 M76 54 q8 8 16 0¨ stroke=¨#5a2a3a¨ stroke-width=¨4¨ fill=¨none¨ stroke-linecap=¨round¨/></g></svg>`);
+const zs=[0,1,2].map(i=>el(`<div style=¨font-weight:900;font-size:${46-i*8}px;color:#bcd0ff;text-shadow:0 3px 10px rgba(0,0,0,.4)¨>Z</div>`));
+const pillBrain=el(`<div class=¨pill¨ style=¨background:rgba(255,157,177,.28);border:3px solid #ff9db1;font-size:26px¨>CEREBRO</div>`);
+// ---------- S2/S3: neurona, cerraduras, llaves, cafeína
+const CX=372,CY=800,CR=170,ANG=[-90,-30,30,90,150,210];
+const cell=el('');
+const sockEl=ANG.map(a=>el(`<div style=¨width:78px;height:46px;border-radius:12px;background:#120b38;border:4px solid #b9acff;box-shadow:inset 0 0 10px rgba(0,0,0,.6);transform:translate(-50%,-50%);box-sizing:border-box¨></div>`));
+const keySvg=(c1,c2)=>`<svg width=¨60¨ height=¨100¨ viewBox=¨0 0 60 100¨ style=¨overflow:visible;transform:translate(-30px,-50px)¨><defs><linearGradient id=¨kg¨ x1=¨0¨ x2=¨1¨><stop offset=¨0¨ stop-color=¨${c1}¨/><stop offset=¨1¨ stop-color=¨${c2}¨/></linearGradient></defs><circle cx=¨30¨ cy=¨22¨ r=¨20¨ fill=¨url(#kg)¨/><circle cx=¨30¨ cy=¨22¨ r=¨8¨ fill=¨#10123a¨/><rect x=¨24¨ y=¨38¨ width=¨12¨ height=¨52¨ rx=¨5¨ fill=¨url(#kg)¨/><rect x=¨34¨ y=¨62¨ width=¨14¨ height=¨9¨ rx=¨3¨ fill=¨url(#kg)¨/><rect x=¨34¨ y=¨78¨ width=¨10¨ height=¨9¨ rx=¨3¨ fill=¨url(#kg)¨/></svg>`;
+const bigKey=el(keySvg('#7fb2ff','#4a73ff'));
+const keys=[0,1,2].map(i=>el(keySvg('#7fb2ff','#4a73ff')));
+const hexSvg=`<svg width=¨78¨ height=¨78¨ viewBox=¨0 0 78 78¨ style=¨overflow:visible;transform:translate(-39px,-39px)¨><polygon points=¨39,4 71,22 71,56 39,74 7,56 7,22¨ fill=¨#ff9a3c¨ stroke=¨#ffd2a0¨ stroke-width=¨4¨ stroke-linejoin=¨round¨/><text x=¨39¨ y=¨50¨ text-anchor=¨middle¨ font-size=¨32¨ font-weight=¨900¨ fill=¨#fff3e0¨ font-family=¨Outfit,Inter,sans-serif¨>C</text></svg>`;
+const hexes=ANG.map(()=>el(hexSvg));
+const keyIdx=[0,1,5];
+const pillMol=el(`<div class=¨pill¨ style=¨background:rgba(127,178,255,.25);border:3px solid #7fb2ff;font-size:28px¨>MOLÉCULA</div>`);
+const pillAde=el(`<div class=¨pill¨ style=¨background:#4a73ff;color:#fff;font-size:30px;box-shadow:0 8px 24px rgba(0,0,0,.35)¨>ADENOSINA</div>`);
+const pillNeu=el(`<div class=¨pill¨ style=¨background:rgba(255,255,255,.16);border:3px solid rgba(255,255,255,.55);font-size:28px¨>NEURONA</div>`);
+const pillCaf=el(`<div class=¨pill¨ style=¨background:#ff9a3c;color:#2a1200;font-size:30px;box-shadow:0 8px 24px rgba(0,0,0,.35)¨>CAFEÍNA</div>`);
+const pillLock=el(`<div class=¨pill¨ style=¨background:rgba(255,255,255,.16);border:3px solid rgba(255,255,255,.55);font-size:26px¨>CERRADURAS</div>`);
+const ring=el(`<div style=¨width:100px;height:100px;border-radius:50%;border:8px solid rgba(255,255,255,.9);transform:translate(-50%,-50%);box-sizing:border-box¨></div>`);
+const stars=[...Array(14)].map((_,i)=>el(`<svg width=¨40¨ height=¨40¨ viewBox=¨-20 -20 40 40¨ style=¨overflow:visible¨><path d=¨M0 -18 L4 -4 L18 0 L4 4 L0 18 L-4 4 L-18 0 L-4 -4Z¨ fill=¨#fff6e0¨/></svg>`));
+const scanL=el(`<div style=¨width:560px;height:4px;background:linear-gradient(90deg,transparent,rgba(111,211,255,.95),transparent);box-shadow:0 0 24px rgba(111,211,255,.9);transform:translateX(-50%)¨></div>`);
+const brk=el(`<svg width=¨720¨ height=¨1280¨ viewBox=¨0 0 720 1280¨ style=¨overflow:visible¨><g stroke=¨rgba(255,255,255,.55)¨ stroke-width=¨5¨ fill=¨none¨ stroke-linecap=¨round¨><path d=¨M70 470 V430 H110¨/><path d=¨M650 470 V430 H610¨/><path d=¨M70 1150 V1190 H110¨/><path d=¨M650 1150 V1190 H610¨/></g></svg>`);
+// ---------- S4b
+const alertG=el(`<div style=¨width:70px;height:260px;border-radius:35px;background:rgba(255,255,255,.2);border:4px solid rgba(255,255,255,.7);overflow:hidden;position:relative¨><div id=¨af¨ style=¨position:absolute;left:0;bottom:0;width:70px;height:0;background:linear-gradient(0deg,#ff5d6c,#ffc26b)¨></div></div><div class=¨pill¨ style=¨left:35px;top:296px;background:rgba(255,255,255,.9);color:#c2314a;font-size:24px¨>ALERTA</div>`);
+const af=alertG.querySelector('#af');
+// ---------- eventos de sonido (tipo y momento; el audio los sintetiza según la escena)
+ev(0,'amb',{kind:'cuarto',len:B1+.2});ev(B1,'amb',{kind:'cerebro',len:B5-B1+.3});ev(B5-.1,'amb',{kind:'brillo',len:DUR-B5+.5});
+ev(cue('cerebro'),'bubble',{});ev(cue('acumula'),'fill',{len:cue('día')-cue('acumula'),k:0});
+for(let i=0;i<9;i++)ev(cue('durante')+i*((cue('día')-cue('durante'))/9),'tictoc',{k:i});
+ev(cue('sueño',0)-.05,'yawn',{});for(let i=0;i<3;i++)ev(cue('sueño',0)+.7+i*.5,'zzz',{k:i});
+ev(B1-.12,'whoosh',{dir:1,len:.5,amp:.8});ev(cue('molécula'),'plip',{k:0});ev(cue('adenosina'),'pop',{p:1});ev(cue('neuronas'),'scan',{});
+const ENC=cue('encaja');for(let i=0;i<3;i++){ev(ENC+.15+i*.28-.5,'plip',{k:i+1});ev(ENC+.15+i*.28,'klik',{k:i})}
+ev(B3-.05,'whoosh',{dir:-1,len:.4,amp:.6});ev(cue('café'),'steam',{});ev(cue('café')+.7,'sip',{});
+for(let i=0;i<6;i++){ev(cue('café')+.3+i*.22+.5,'snap',{k:i});if([0,1,5].includes(i))ev(cue('café')+.3+i*.22+.5,'bonk',{k:i})}
+ev(B4+.05,'burst',{});for(let i=0;i<6;i++)ev(B4+.25+i*.1,'sparkle',{k:i});ev(B5-.1,'whoosh',{dir:1,len:.5,amp:.8});
+ev(cue('despiertas'),'ding',{});ev(DUR-1.5,'thump',{});
+// ---------- cámara
+const CAM=[[0,1.0,0,0,-.6],[B1-.45,1.1,0,-18,.6],[B1+.1,2.6,-468,754,0],[B1+.12,1.2,0,0,0],[B3-.2,1.05,0,0,0],[B3+.25,1.22,0,-30,0],[B4-.1,1.0,0,0,0],[B4+.06,1.28,0,-30,0],[B5-.1,1.05,0,0,0],[B5+.4,1.0,0,0,0],[DUR,1.08,0,-20,.6]];
+// ---------- cuadro a cuadro
+function frame(t){
+ const cam=camAt(CAM,t);document.getElementById('cam').style.transform=`translate(${cam[2]}px,${cam[3]}px) rotate(${cam[4]}deg) scale(${cam[1]})`;
+ sets.style.transform=`translate(${cam[2]*.3}px,${cam[3]*.3}px) rotate(${cam[4]*.5}deg) scale(${1+(cam[1]-1)*.4})`;
+ document.getElementById('bg').style.background='#07040f';
+ const o1=1-ramp(t,B1-.12,B1+.08),o2=ramp(t,B1+.05,B1+.3)*(1-ramp(t,B5-.2,B5+.12)),o4=ramp(t,B5-.2,B5+.25);
+ document.getElementById('set1').style.opacity=o1;document.getElementById('set2').style.opacity=o2;document.getElementById('set4').style.opacity=o4;
+ document.getElementById('rays').style.transform=`rotate(${t*7}deg)`;
+ document.querySelectorAll('.tis').forEach((d,i)=>d.style.transform=`translate(${Math.sin(t*.35+i)*22}px,${Math.cos(t*.3+i*2)*18}px)`);
+ ACC=t<B1?[160,190,235]:t<B3?[111,211,255]:t<B5-.1?[255,128,110]:[60,26,100];
+ dust(t,t<B1?'190,210,240':t<B5?'180,170,255':'255,240,220');
+ grainAt(t);
+ // ---- S1
+ const sN=cue('sueño',0),acu=cue('acumula'),dia=cue('día');
+ const e0=lerp(.85,.16,ramp(t,acu,dia,E.io));const y=ramp(t,sN-.05,sN+.55,E.io)*(1-ramp(t,sN+.95,sN+1.5));
+ const hand=[lerp(312,248,y),lerp(560,318,y)];
+ liaMain.innerHTML=lia({uid:'m',eyes:e0*(1-.8*y),blink:blink(t,2.7,.4)*(e0>.3?1:.5),mouth:'yawn',mo:y,brow:-.35,look:[0,.35],handR:hand,handL:[88,560],shirt:'#8b6be0',shirtD:'#6a4cc0',blush:0});
+ tf(liaMain,110,430+Math.sin(t*1.3)*5,1.25,Math.sin(t*.8)*1.3+(1-e0)*2.5,o1*ramp(t,.05,.5));
+ tf(clock,60,400,1,0,o1*ramp(t,cue('durante')-.4,cue('durante')));clockPill.style.zIndex=3;tf(clockPill,135,578,1,0,o1*ramp(t,cue('durante')-.3,cue('durante')+.1));
+ const cp=ramp(t,cue('durante')-.2,dia+.4,E.io);hm.setAttribute('transform',`rotate(${cp*2880} 75 75)`);hh.setAttribute('transform',`rotate(${cp*240} 75 75)`);
+ tf(gauge,66,640,1,0,o1*ramp(t,acu-.2,acu+.2));const gv=ramp(t,acu,dia,E.io);gf.style.height=(gv*100)+'%';
+ const bI=ramp(t,cue('cerebro'),cue('cerebro')+.45,E.outB);tf(bubble,420,320,bI,0,o1*(bI>0?1:0));tf(pillBrain,560,640,bI,0,o1*(bI>0?1:0));
+ zs.forEach((z,i)=>{const t0=sN+.5+i*.45,u=cl((t-t0)/1.6);tf(z,560+i*28+Math.sin(u*6+i)*10,430-u*(80+i*30),.8+.4*u,i*8-8,o1*(t>t0?1-ramp(u,.7,1):0))});
+ // ---- S2/S3 neurona
+ const nI=ramp(t,B1+.1,B1+.7,E.outB),inS2=o2;
+ const dockT=i=>ENC+.15+i*.28;const docked=keys.reduce((s,_,i)=>s+ramp(t,dockT(i)-.02,dockT(i)+.1),0);
+ const plugT=i=>cue('café')+.3+i*.22+.5;const plugged=ANG.reduce((s,_,i)=>s+ramp(t,plugT(i)-.02,plugT(i)+.1),0);
+ let eyesC=lerp(.9,.1,docked/3);eyesC=t>B3?lerp(.1,.9,plugged/6):eyesC;const wake=ramp(t,B4,B4+.3);eyesC=lerp(eyesC,1.0,wake);
+ const pulse=1+.16*Math.max(0,1-Math.abs(t-(B4+.12))*5);
+ cell.innerHTML=`<svg width=¨460¨ height=¨460¨ viewBox=¨0 0 460 460¨ style=¨overflow:visible¨><defs><radialGradient id=¨cg¨ cx=¨.4¨ cy=¨.35¨><stop offset=¨0¨ stop-color=¨${wake>.5?'#9a7bff':'#7a63e8'}¨/><stop offset=¨1¨ stop-color=¨${wake>.5?'#5a3fd0':'#3a2a9a'}¨/></radialGradient></defs>
+ <circle cx=¨230¨ cy=¨230¨ r=¨172¨ fill=¨url(#cg)¨ stroke=¨#a89bff¨ stroke-width=¨8¨/><circle cx=¨290¨ cy=¨300¨ r=¨48¨ fill=¨#ff7ab8¨ opacity=¨.9¨/><circle cx=¨276¨ cy=¨288¨ r=¨12¨ fill=¨#ffc0dc¨ opacity=¨.8¨/>
+ ${[175,285].map(cx=>`<ellipse cx=¨${cx}¨ cy=¨190¨ rx=¨30¨ ry=¨34¨ fill=¨#fff¨/><circle cx=¨${cx+(wake?0:0)}¨ cy=¨${192+(1-eyesC)*4}¨ r=¨14¨ fill=¨#241046¨/><circle cx=¨${cx-5}¨ cy=¨${186+(1-eyesC)*4}¨ r=¨4.6¨ fill=¨#fff¨/><clipPath id=¨cl${cx}¨><ellipse cx=¨${cx}¨ cy=¨190¨ rx=¨30¨ ry=¨34¨/></clipPath><g clip-path=¨url(#cl${cx})¨><rect x=¨${cx-32}¨ y=¨152¨ width=¨64¨ height=¨${(1-eyesC)*72}¨ fill=¨#6a54d8¨/></g>`).join('')}
+ ${eyesC<.4?`<path d=¨M205 262 Q230 258 255 262¨ stroke=¨#241046¨ stroke-width=¨6¨ fill=¨none¨ stroke-linecap=¨round¨/>`:`<path d=¨M200 258 Q230 ${258+ (eyesC>.8?34:8)} 260 258¨ stroke=¨#241046¨ stroke-width=¨6¨ fill=¨none¨ stroke-linecap=¨round¨/>`}</svg>`;
+ tf(cell,CX-230,CY-230,nI*pulse,0,inS2*(nI>0?1:0));
+ const nrm=a=>[Math.cos(a*Math.PI/180),Math.sin(a*Math.PI/180)];
+ ANG.forEach((a,i)=>{const n=nrm(a);tf(sockEl[i],CX+n[0]*(CR*nI),CY+n[1]*(CR*nI),nI,a+90,inS2*cl(nI*1.2))});
+ // llave grande -> 3 llaves
+ const molT=cue('molécula'),bigIn=ramp(t,molT,molT+.45,E.outB),bigOut=1-ramp(t,ENC,ENC+.2);const bigPos=[540,560+Math.sin(t*3)*10];
+ tf(bigKey,bigPos[0],bigPos[1],1.7*bigIn,Math.sin(t*2.2)*18,inS2*bigOut*(bigIn>0?1:0));
+ tf(pillMol,540,690,ramp(t,molT+.1,molT+.5,E.outB),0,inS2*bigOut*ramp(t,molT+.1,molT+.3)*(1-ramp(t,cue('adenosina'),cue('adenosina')+.05)));
+ const adeI=ramp(t,cue('adenosina'),cue('adenosina')+.35,E.outB);tf(pillAde,540,690,adeI,0,inS2*bigOut*(adeI>0?1:0));
+ const nuI=ramp(t,cue('neuronas'),cue('neuronas')+.35,E.outB);tf(pillNeu,150,660,nuI,0,inS2*(nuI>0?1:0)*(1-ramp(t,B3,B3+.2)));
+ keys.forEach((k,i)=>{const a=ANG[keyIdx[i]],n=nrm(a),tD=dockT(i),t0=tD-.5,u=cl((t-t0)/.5);
+  let x,yv,sc,op=0,rot=a+90;
+  if(t>=t0&&t<plugT(keyIdx[i])+.05){const e=E.io(u),d=lerp(380,-6,E.outC(u));const ex=CX+n[0]*(CR+d),ey=CY+n[1]*(CR+d);
+   const bx=bigPos[0],by=bigPos[1];x=lerp(bx,ex,e);yv=lerp(by,ey,e);sc=lerp(1.7,1,e);op=inS2*(1-ramp(t,tD+.4,tD+.4)*0);rot=lerp(Math.sin(t*2.2)*18,a+90,e)}
+  else if(t>=plugT(keyIdx[i])+.05){const w=cl((t-plugT(keyIdx[i])-.05)/.7),d=w*w*520;x=CX+n[0]*(CR+d)+Math.sin(w*9)*20;yv=CY+n[1]*(CR+d)-w*60;sc=1;rot=a+90+w*420;op=inS2*(1-ramp(w,.55,1))}
+  tf(k,x||0,yv||0,sc||1,rot,op)});
+ hexes.forEach((h,i)=>{const a=ANG[i],n=nrm(a),t1=plugT(i),t0=t1-.45,u=cl((t-t0)/.45);if(t<t0){tf(h,0,0,1,0,0);return}
+  const ang=a+(i%2?28:-28),n2=nrm(ang),d=lerp(420,-4,E.outC(u))*(1);const bx=CX+n[0]*(CR+d)+n2[0]*(1-u)*90,by=CY+n[1]*(CR+d)+n2[1]*(1-u)*90;
+  tf(h,bx,by,1,(u<1?u*360:0)+a+90,inS2)});
+ const cafI=ramp(t,cue('café')+.1,cue('café')+.45,E.outB);tf(pillCaf,540,590,cafI,0,inS2*(cafI>0?1:0)*(1-ramp(t,B4,B4+.2)));
+ const lkI=ramp(t,cue('cerraduras'),cue('cerraduras')+.3,E.outB);tf(pillLock,190,640,lkI,0,inS2*(lkI>0?1:0)*(1-ramp(t,B4,B4+.2)));
+ // anillo y estrellas (despertar)
+ const rr=ramp(t,B4+.05,B4+.8);tf(ring,CX,CY,.2+rr*7,0,inS2*(rr>0&&rr<1?(1-rr):0)*.9);
+ stars.forEach((s,i)=>{const a=i*(360/14)+10,u=cl((t-B4-.08)/1.1),d=100+u*(260+rnd(i)*160);tf(s,CX+Math.cos(a*Math.PI/180)*d,CY+Math.sin(a*Math.PI/180)*d,(1-u)*(.6+rnd(i+3)),u*200,(t>B4+.08)&&(t<B5+.2)?(1-u):0)});
+ // escáner: línea que barre la neurona
+ const su=cl((t-cue('neuronas'))/1.3);tf(scanL,360,CY-200+su*400,1,0,inS2*(su>0&&su<1?Math.sin(su*Math.PI):0));tf(brk,0,0,1,0,inS2*.8*ramp(t,B1+.3,B1+.6)*(1-ramp(t,B5-.2,B5)));
+ // ---- S3: ventanita con Lía tomando café
+ const pI=ramp(t,B3+.1,B3+.55,E.outB)*(1-ramp(t,B4+.1,B4+.35)),sip=ramp(t,cue('café')+.3,cue('café')+.9,E.io);
+ liaIn.innerHTML=lia({uid:'i',eyes:lerp(.3,.95,ramp(t,cue('café')+.8,cue('café')+1.8)),blink:blink(t,2.2,.3)*.6,mouth:sip>.7?'o':'neutral',mo:0,brow:lerp(-.2,.2,sip),look:[0,0],handR:[lerp(318,214,sip),lerp(560,300,sip)],handL:[92,560],cup:true,cupTilt:lerp(0,-24,sip),shirt:'#e86a5a',shirtD:'#c9503f',blush:.3});
+ liaIn.style.transform='translate(10px,-12px) scale(.66)';liaIn.style.transformOrigin='0 0';
+ tf(porthole,52,968,pI,0,inS2*(pI>0?1:0));
+ // ---- S4b
+ const o4b=ramp(t,B5,B5+.3),bounce=Math.abs(Math.sin((t-B5)*5.5))*26*ramp(t,B5+.2,B5+.5);
+ liaEnd.innerHTML=lia({uid:'e',eyes:1,blink:blink(t,3,.2),mouth:'grin',brow:.7,look:[Math.sin(t*2)*.4,-.2],handL:[40+Math.sin(t*9)*12,128+Math.sin(t*9)*10],handR:[360+Math.sin(t*9+1)*12,128+Math.sin(t*9+1)*10],shirt:'#c79bff',shirtD:'#a070e8',blush:1,skin:'#e8a583'});
+ tf(liaEnd,110,430-bounce,1.25,Math.sin(t*5.5)*2.2,o4b);
+ tf(alertG,600,640,1,0,o4b*ramp(t,cue('despiertas')-.5,cue('despiertas')));af.style.height=(ramp(t,cue('sientes'),cue('despiertas')+.8,E.io)*100)+'%';
+ // texto de fuente
+ const fo=ramp(t,B5+.9,B5+1.4);const ft=document.getElementById('foot');ft.style.opacity=fo;ft.innerHTML='Fuente: Fredholm et al., Pharmacological Reviews (1999)<br>La cafeína no reemplaza al sueño.';
+ subsAt(t)}
+window.seek=frame;window.EV=EV;window.DUR=DUR;window.WORDS=WORDS;frame(0);
+</script>
