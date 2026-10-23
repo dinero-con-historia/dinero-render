@@ -1,0 +1,32 @@
+name: VOZ test
+on:
+  push:
+    paths: ['voztests/**/job.json']
+permissions:
+  contents: write
+jobs:
+  voz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Voces
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg
+          pip install edge-tts
+          python webreel/decode.py
+          JOB=$(git diff --name-only HEAD~1 HEAD | grep '^voztests/' | head -1)
+          ID=$(basename $(dirname $JOB))
+          cd webreel
+          python voztest.py /tmp/$ID.mp4
+          OK=$(cat /tmp/$ID.mp4.ok)
+          echo ok > /tmp/$OK.txt
+          gh release create v-$ID /tmp/$ID.mp4 /tmp/$OK.txt --title $ID --notes voztest
