@@ -21,11 +21,13 @@ jobs:
           sudo apt-get update -y && sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-inter
           mkdir -p ~/.fonts
           curl -sL -o ~/.fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf || true
+          curl -sL -o ~/.fonts/Poppins-Medium.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Medium.ttf || true
           curl -sL -o ~/.fonts/BarlowCondensed-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Bold.ttf || true
           fc-cache -f || true
       - name: Renderizar video
         run: |
           pip install --quiet --break-system-packages pillow numpy edge-tts || pip install --quiet pillow numpy edge-tts || true
+          if [ -f motion_pack.tgz ]; then tar xzf motion_pack.tgz; fi
           if grep -q '"plantilla"' "jobs/${JOB_ID}/job.json"; then
             python3 render_motion.py "jobs/${JOB_ID}/job.json" "video-${JOB_ID}.mp4"
           else
