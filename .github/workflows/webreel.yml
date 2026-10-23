@@ -39,8 +39,10 @@ jobs:
           if [ -z $JOB ]; then JOB=$(git diff --name-only HEAD~1 HEAD | grep '^webjobs/.*/job.json' | head -1); fi
           eval $(python webreel/jobvars.py $JOB)
           cd webreel
+          if grep -q '"spec"' ../$JOB; then python build_scene.py ../$JOB scene.html; fi
           python tts.py ../$JOB /tmp/voz
           python render3.py $HTML /tmp/voz.json /tmp/voz.wav /tmp/$ID.mp4
           INFO=$(python jobvars.py info)
           cp /tmp/voz.json /tmp/$INFO.json
           gh release create v-$ID /tmp/$ID.mp4 /tmp/$INFO.json --title $ID --notes webreel || gh release upload v-$ID /tmp/$ID.mp4 /tmp/$INFO.json --clobber
+
