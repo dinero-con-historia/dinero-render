@@ -22,8 +22,10 @@ jobs:
           mkdir -p ~/.fonts
           curl -sL -o ~/.fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf || true
           curl -sL -o ~/.fonts/Poppins-Medium.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Medium.ttf || true
+          curl -sL -o ~/.fonts/Outfit.ttf "https://raw.githubusercontent.com/google/fonts/main/ofl/outfit/Outfit%5Bwght%5D.ttf" || true
           curl -sL -o ~/.fonts/BarlowCondensed-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Bold.ttf || true
           fc-cache -f || true
+          ls -la ~/.fonts
       - name: Renderizar video
         run: |
           pip install --quiet --break-system-packages pillow numpy edge-tts || pip install --quiet pillow numpy edge-tts || true
