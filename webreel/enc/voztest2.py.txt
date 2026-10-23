@@ -1,0 +1,97 @@
+import asyncio, subprocess, sys, random
+import numpy as np, scipy.io.wavfile as wf
+import edge_tts
+SR = 44100
+PH = ['Señor, gracias...', 'gracias porque hoy amaneció,', 'una nueva oportunidad.', 'Respira hondo,', 'y recibe esta oración', 'como si fuera solo para ti.', 'Creo que estás obrando', 'incluso en el silencio,', 'y que todo va a cambiar,', 'porque tú estás conmigo.', 'En el nombre de Jesús.', 'Amén.']
+PA = [0.45, 0.4, 0.9, 0.55, 0.3, 0.9, 0.35, 0.4, 0.3, 0.9, 0.8, 0.0]
+NUM = ['uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis']
+FX = 'highpass=f=70,lowpass=f=9000,equalizer=f=200:t=q:w=1:g=2.5,aecho=0.8:0.85:50|110|180:0.25|0.18|0.1,loudnorm=I=-16:TP=-1.5'
+
+def sh(cmd):
+    subprocess.run(cmd, check=True)
+
+def load(path):
+    sh(['ffmpeg', '-y', '-v', 'error', '-i', path, '-ac', '1', '-ar', str(SR), '/tmp/_l.wav'])
+    sr, x = wf.read('/tmp/_l.wav')
+    return x.astype(np.float32) / 32768
+
+async def edge(text, voice, rate, pitch, path):
+    await edge_tts.Communicate(text, voice, rate=rate, pitch=pitch).save(path)
+
+def edge_phrase(text, voice, rate, pitch):
+    asyncio.run(edge(text, voice, rate, pitch, '/tmp/_p.mp3'))
+    return load('/tmp/_p.mp3')
+
+def breath(n):
+    x = np.random.randn(n).astype(np.float32)
+    x = np.convolve(x, np.ones(24) / 24, 'same')
+    return x * np.hanning(n) * 0.05
+
+def assemble(chunks, pauses):
+    out = []
+    for i, c in enumerate(chunks):
+        c = c.copy(); f = int(0.006 * SR)
+        c[:f] *= np.linspace(0, 1, f); c[-f:] *= np.linspace(1, 0, f)
+        out.append(c)
+        p = int(pauses[i] * SR)
+        sil = np.zeros(p, np.float32)
+        if pauses[i] >= 0.8:
+            b = breath(int(0.22 * SR)); sil[-len(b):] += b
+        out.append(sil)
+    return np.concatenate(out)
+
+def finish(x, path):
+    wf.write('/tmp/_raw.wav', SR, (np.clip(x, -1, 1) * 32767).astype(np.int16))
+    sh(['ffmpeg', '-y', '-v', 'error', '-i', '/tmp/_raw.wav', '-af', FX, '-ar', str(SR), '-ac', '1', path])
+
+def edge_voice(voice, base_rate, base_pitch, idx):
+    random.seed(idx)
+    chunks = []
+    for j, t in enumerate(['Voz %s.' % NUM[idx]] + PH):
+        r = base_rate + random.choice([-3, -1, 0, 2]); p = base_pitch + random.choice([-1, 0, 1])
+        chunks.append(edge_phrase(t, voice, '%+d%%' % r, '%+dHz' % p))
+    return assemble(chunks, [0.7] + PA)
+
+def kokoro_voice(pipe, voice, speed, phrasal, idx):
+    def say(t):
+        a = []
+        for _, _, au in pipe(t, voice=voice, speed=speed):
+            a.append(au.numpy() if hasattr(au, 'numpy') else np.array(au))
+        wf.write('/tmp/_k.wav', 24000, (np.clip(np.concatenate(a), -1, 1) * 32767).astype(np.int16))
+        return load('/tmp/_k.wav')
+    if phrasal:
+        return assemble([say('Voz %s.' % NUM[idx])] + [say(t) for t in PH], [0.7] + PA)
+    full = say('Voz %s.' % NUM[idx]); full2 = say(' '.join(PH))
+    return np.concatenate([full, np.zeros(int(0.7 * SR), np.float32), full2])
+
+clips = []
+jobs = [
+ ('edge', 'es-US-PalomaNeural', -14, -4),
+ ('edge', 'es-CO-SalomeNeural', -14, -4),
+ ('edge', 'es-MX-DaliaNeural', -14, -4),
+ ('edge', 'es-ES-XimenaNeural', -14, -4),
+]
+ok = []
+for i, (k, v, r, p) in enumerate(jobs):
+    try:
+        clips.append(edge_voice(v, r, p, i)); ok.append(str(i + 1)); print('ok', i + 1, v)
+    except Exception as e:
+        print('FALLA', i + 1, v, e); clips.append(np.zeros(int(SR * 0.5), np.float32))
+try:
+    from kokoro import KPipeline
+    pipe = KPipeline(lang_code='e')
+    for i, ph in ((4, False), (5, True)):
+        try:
+            clips.append(kokoro_voice(pipe, 'ef_dora', 0.85, ph, i)); ok.append(str(i + 1)); print('ok', i + 1, 'kokoro', ph)
+        except Exception as e:
+            print('FALLA kokoro', i + 1, e); clips.append(np.zeros(int(SR * 0.5), np.float32))
+except Exception as e:
+    print('FALLA kokoro import', e)
+parts = []
+for i, c in enumerate(clips):
+    finish(c, '/tmp/c%d.wav' % i); parts.append('/tmp/c%d.wav' % i)
+    sh(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '1.2', '/tmp/sil%d.wav' % i]); parts.append('/tmp/sil%d.wav' % i)
+open('/tmp/lista.txt', 'w').write(''.join(¨file '%s'¦n¨ % p for p in parts))
+sh(['ffmpeg', '-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', '/tmp/lista.txt', '-c', 'copy', '/tmp/todo.wav'])
+sh(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=0x1a1030:s=360x640:r=10', '-i', '/tmp/todo.wav', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', sys.argv[1]])
+open(sys.argv[1] + '.ok', 'w').write('ok_' + ''.join(ok))
