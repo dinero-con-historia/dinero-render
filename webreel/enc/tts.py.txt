@@ -5,6 +5,7 @@ import edge_tts
 job = json.load(open(sys.argv[1])); OUT = sys.argv[2]
 VOICE = job.get('voice', 'es-MX-JorgeNeural'); TARGET = float(job.get('target_sylps', 5.5)); LEAD = float(job.get('lead', 0.3))
 TEXT = job['text']
+PITCH = job.get('pitch', '+0Hz'); FIXED = job.get('rate_pct')
 
 def norm(w):
     w = unicodedata.normalize('NFD', w.lower())
@@ -12,9 +13,9 @@ def norm(w):
 
 async def synth(rate, path):
     try:
-        c = edge_tts.Communicate(TEXT, VOICE, rate=rate, boundary='WordBoundary')
+        c = edge_tts.Communicate(TEXT, VOICE, rate=rate, pitch=PITCH, boundary='WordBoundary')
     except TypeError:
-        c = edge_tts.Communicate(TEXT, VOICE, rate=rate)
+        c = edge_tts.Communicate(TEXT, VOICE, rate=rate, pitch=PITCH)
     words = []
     with open(path, 'wb') as f:
         async for ch in c.stream():
@@ -40,11 +41,14 @@ def run(pct):
     words = asyncio.run(synth(rate, OUT + '.mp3')); to_wav(OUT + '.mp3', OUT + '_16k.wav', 16000)
     return words, sylrate(OUT + '_16k.wav')
 
-pct = 0
-words, (sv, st, d) = run(pct); log = [('+0%', round(sv, 2), round(st, 2))]
-f = TARGET / sv; pct = int(max(-20, min(25, round((f - 1) * 100))))
-if abs(pct) >= 2:
-    words, (sv, st, d) = run(pct); log.append(('%+d%%' % pct, round(sv, 2), round(st, 2)))
+if FIXED is not None:  # velocidad fija elegida por Ferlyn a oido
+    pct = int(FIXED); words, (sv, st, d) = run(pct); log = [('%+d%%' % pct, round(sv, 2), round(st, 2))]
+else:
+    pct = 0
+    words, (sv, st, d) = run(pct); log = [('+0%', round(sv, 2), round(st, 2))]
+    f = TARGET / sv; pct = int(max(-20, min(25, round((f - 1) * 100))))
+    if abs(pct) >= 2:
+        words, (sv, st, d) = run(pct); log.append(('%+d%%' % pct, round(sv, 2), round(st, 2)))
 print('calibracion', log)
 
 # alinear con las palabras del guion (con puntuacion)
