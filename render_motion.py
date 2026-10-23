@@ -9,7 +9,7 @@ from multiprocessing import Pool
 
 import numpy as np
 
-import motion as M
+import motion2 as M
 
 GAP = 0.14
 MIN_DUR = 1.7
@@ -159,7 +159,7 @@ def main():
         w.setsampwidth(2)
         w.setframerate(SR)
         w.writeframes((mix * 32767).astype(np.int16).tobytes())
-    grupos = M.grupos_de(words)
+    grupos = M.phrases_de(words)
     nfr = int(total * M.FPS)
     only = int(os.environ.get('MOTION_FRAMES', '0'))
     if only:
