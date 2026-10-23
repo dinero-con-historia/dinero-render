@@ -1,0 +1,29 @@
+name: voztest3
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: instalar
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          pip install edge-tts
+      - name: generar
+        run: |
+          T="Sabias que tu cuerpo tiene mas bacterias que celulas humanas? Suena imposible, pero los cientificos lo midieron en dos mil dieciseis. Y aqui viene lo mejor: casi todas te ayudan a digerir, a defenderte y hasta a pensar mejor. Enviaselo a alguien que todavia no lo sabia."
+          for R in 8 14 20; do
+            P=0
+            if [ $R = 8 ]; then P=2; fi
+            edge-tts --voice es-MX-JorgeNeural --rate=+${R}% --pitch=+${P}Hz --text "$T" --write-media v$R.mp3
+            ffmpeg -y -loglevel error -f lavfi -i color=c=black:s=540x960:r=15 -i v$R.mp3 -vf "drawtext=text='Jorge ${R}':fontcolor=white:fontsize=80:x=(w-tw)/2:y=(h-th)/2" -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac voz$R.mp4
+          done
+          ls -la
+      - name: publicar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create v-voztest3 voz8.mp4 voz14.mp4 voz20.mp4 -t voztest3 -n prueba --repo ${{ github.repository }}
+
