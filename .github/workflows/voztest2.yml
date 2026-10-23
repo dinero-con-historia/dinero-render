@@ -1,0 +1,34 @@
+name: VOZ test 2
+on:
+  push:
+    paths: ['voztests2/**/job.json']
+permissions:
+  contents: write
+jobs:
+  voz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Voces
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg espeak-ng
+          pip install edge-tts numpy scipy
+          pip install torch --index-url https://download.pytorch.org/whl/cpu || true
+          pip install kokoro soundfile || true
+          python webreel/decode.py
+          JOB=$(git diff --name-only HEAD~1 HEAD | grep '^voztests2/' | head -1)
+          ID=$(basename $(dirname $JOB))
+          cd webreel
+          python voztest2.py /tmp/$ID.mp4
+          OK=$(cat /tmp/$ID.mp4.ok)
+          echo ok > /tmp/$OK.txt
+          gh release create v-$ID /tmp/$ID.mp4 /tmp/$OK.txt --title $ID --notes voztest2
