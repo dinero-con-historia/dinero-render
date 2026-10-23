@@ -20,7 +20,8 @@ jobs:
         run: sudo apt-get update -y && sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-inter
       - name: Renderizar video
         run: |
-          python3 render_dinero.py "jobs/${JOB_ID}/job.json" "video-${JOB_ID}.mp4"
+          pip install --quiet --break-system-packages edge-tts || pip install --quiet edge-tts || true
+          python3 render_dinero_edge.py "jobs/${JOB_ID}/job.json" "video-${JOB_ID}.mp4"
       - name: Publicar video en Release
         run: gh release create "v-${JOB_ID}" "video-${JOB_ID}.mp4" --title "video-${JOB_ID}" --notes "DINERO"
       - name: Limpiar paquete del repositorio
