@@ -10,18 +10,27 @@ permissions:
 jobs:
   render:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     env:
       JOB_ID: ${{ inputs.job_id }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Instalar ffmpeg y fuentes
-        run: sudo apt-get update -y && sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-inter
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-inter
+          mkdir -p ~/.fonts
+          curl -sL -o ~/.fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf || true
+          curl -sL -o ~/.fonts/BarlowCondensed-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Bold.ttf || true
+          fc-cache -f || true
       - name: Renderizar video
         run: |
-          pip install --quiet --break-system-packages edge-tts || pip install --quiet edge-tts || true
-          python3 render_dinero_edge.py "jobs/${JOB_ID}/job.json" "video-${JOB_ID}.mp4"
+          pip install --quiet --break-system-packages pillow numpy edge-tts || pip install --quiet pillow numpy edge-tts || true
+          if grep -q '"plantilla"' "jobs/${JOB_ID}/job.json"; then
+            python3 render_motion.py "jobs/${JOB_ID}/job.json" "video-${JOB_ID}.mp4"
+          else
+            python3 render_dinero_edge.py "jobs/${JOB_ID}/job.json" "video-${JOB_ID}.mp4"
+          fi
       - name: Publicar video en Release
         run: gh release create "v-${JOB_ID}" "video-${JOB_ID}.mp4" --title "video-${JOB_ID}" --notes "DINERO"
       - name: Limpiar paquete del repositorio
