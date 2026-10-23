@@ -1,0 +1,37 @@
+import asyncio, subprocess, sys, json
+import edge_tts
+TEXT = 'Señor, gracias... gracias porque hoy amaneció, una nueva oportunidad. Respira hondo, y recibe esta oración como si fuera solo para ti. Creo que estás obrando incluso en el silencio, y que todo va a cambiar, porque tú estás conmigo. En el nombre de Jesús. Amén.'
+NUM = ['uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho']
+V = [
+ ('es-MX-DaliaNeural', '-8%', '+0Hz', 0),
+ ('es-MX-DaliaNeural', '-12%', '-3Hz', 1),
+ ('es-US-PalomaNeural', '-12%', '-3Hz', 1),
+ ('es-CO-SalomeNeural', '-12%', '-3Hz', 1),
+ ('es-ES-XimenaNeural', '-12%', '-3Hz', 1),
+ ('es-ES-ElviraNeural', '-12%', '-3Hz', 1),
+ ('es-CL-CatalinaNeural', '-12%', '-3Hz', 1),
+ ('es-VE-PaolaNeural', '-12%', '-3Hz', 1),
+]
+FX = 'highpass=f=70,lowpass=f=9500,equalizer=f=220:t=q:w=1:g=2,aecho=0.85:0.6:45|90:0.22|0.12,loudnorm=I=-16:TP=-1.5'
+PLAIN = 'loudnorm=I=-16:TP=-1.5'
+
+async def synth(text, voice, rate, pitch, path):
+    c = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+    await c.save(path)
+
+ok = []
+parts = []
+subprocess.run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-t', '1.0', '/tmp/sil.wav'], check=True)
+for i, (voice, rate, pitch, fx) in enumerate(V):
+    mp3 = '/tmp/v%d.mp3' % i; wav = '/tmp/v%d.wav' % i
+    try:
+        asyncio.run(synth('Voz %s. %s' % (NUM[i], TEXT), voice, rate, pitch, mp3))
+        subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', mp3, '-af', FX if fx else PLAIN, '-ar', '44100', '-ac', '1', wav], check=True)
+        parts += [wav, '/tmp/sil.wav']; ok.append(str(i + 1))
+        print('ok', i + 1, voice, rate, pitch, fx)
+    except Exception as e:
+        print('FALLA', i + 1, voice, e)
+open('/tmp/lista.txt', 'w').write(''.join(¨file '%s'¦n¨ % p for p in parts))
+subprocess.run(['ffmpeg', '-y', '-v', 'error', '-f', 'concat', '-safe', '0', '-i', '/tmp/lista.txt', '-c', 'copy', '/tmp/todo.wav'], check=True)
+subprocess.run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=0x1a1030:s=360x640:r=10', '-i', '/tmp/todo.wav', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', sys.argv[1]], check=True)
+open(sys.argv[1] + '.ok', 'w').write('ok_' + ''.join(ok))
