@@ -4,6 +4,7 @@ import sys
 
 from motion6 import *
 from motion6 import frame, phrases_de, PLANTILLAS, PALETA, build_sfx, SR, W, H, FPS
+import fondos
 
 
 def _director():
@@ -15,6 +16,10 @@ def _director():
         job = json.load(open(p, encoding='utf-8'))
         import director
         job['escenas'] = director.autocompletar(job.get('escenas'), job.get('guion'), job.get('opciones'))
+        try:
+            fondos.variar(job)
+        except Exception as e:
+            print('fondos fallo', e, file=sys.stderr)
         json.dump(job, open(p, 'w', encoding='utf-8'), ensure_ascii=False)
     except Exception as e:
         print('director fallo', e, file=sys.stderr)
