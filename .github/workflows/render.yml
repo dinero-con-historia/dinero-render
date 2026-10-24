@@ -30,7 +30,7 @@ jobs:
         run: |
           pip install --quiet --break-system-packages pillow numpy edge-tts || pip install --quiet pillow numpy edge-tts || true
           if [ -f motion_pack.tgz ]; then tar xzf motion_pack.tgz; fi
-          if grep -q '"plantilla"' "jobs/${JOB_ID}/job.json"; then
+          if grep -Eq '"(plantilla|motor)"' "jobs/${JOB_ID}/job.json"; then
             python3 render_motion.py "jobs/${JOB_ID}/job.json" "video-${JOB_ID}.mp4"
           else
             python3 render_dinero_edge.py "jobs/${JOB_ID}/job.json" "video-${JOB_ID}.mp4"
