@@ -14,6 +14,7 @@ import motion2 as M
 GAP = 0.14
 MIN_DUR = 1.7
 TAIL = 0.9
+PITCH = '+0Hz'
 SR = M.SR
 
 def sh(cmd):
@@ -26,7 +27,7 @@ def dur_audio(path):
 
 async def _tts(texto, voz, rate, mp3):
     import edge_tts
-    com = edge_tts.Communicate(texto, voz, rate=rate, boundary='WordBoundary')
+    com = edge_tts.Communicate(texto, voz, rate=rate, pitch=PITCH, boundary='WordBoundary')
     words = []
     with open(mp3, 'wb') as f:
         async for ch in com.stream():
@@ -59,7 +60,9 @@ def alinea(texto, ev, dur):
 
 def voz(job, work):
     voz_n = job.get('voz_edge', 'es-MX-JorgeNeural')
-    rate = job.get('rate', '+6%')
+    global PITCH
+    rate = job.get('rate', '+8%')
+    PITCH = job.get('pitch', '+2Hz')
     escenas = job['escenas']
     clips, info = [], []
     for i, sc in enumerate(escenas):
