@@ -4,6 +4,7 @@ from PIL import Image, ImageDraw
 
 import motion3 as _3
 import motion5 as _5
+import estilo_morado as _E
 from motion6 import *
 from motion6 import n_escena6, PLANTILLAS, cue, prog, S, pfont
 
@@ -357,6 +358,7 @@ _3.OBJETOS.update(_NUEVOS7)
 
 
 def n_escena7(d, t, sc):
+    _E.fijar(sc)
     # los objetos flotan suave despues de entrar (mas vida, sin zoom)
     capas = []
     for i, c in enumerate(sc['p'].get('capas', [])):
