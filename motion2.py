@@ -4,6 +4,7 @@ import sys
 
 from motion6 import *
 from motion6 import frame, phrases_de, PLANTILLAS, PALETA, build_sfx, SR, W, H, FPS
+import motion7
 import fondos
 
 
