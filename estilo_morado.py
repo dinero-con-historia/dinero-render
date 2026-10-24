@@ -6,7 +6,7 @@ import re
 import time
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 import motion3 as _3
 import motion4 as _4
@@ -67,7 +67,7 @@ def _fondo(kind):
     return _ORIG_FONDO['f'](kind)
 
 
-def _tint(lay, k, glow):
+def _tint_viejo(lay, k, glow):
     bb = lay.getchannel('A').getbbox()
     if not bb:
         return lay
@@ -101,7 +101,7 @@ def _tint(lay, k, glow):
     return out
 
 
-def _wrap(fn):
+def _wrap_viejo(fn):
     def g(ti, t):
         modo = ESTILO['modo']
         if not modo:
@@ -201,6 +201,45 @@ def instalar():
     _ORIG_FONDO['f'] = _4.fondo
     _4.fondo = _fondo
     _4.draw_subs2 = draw_subs3
+
+
+def _tint(lay, k, glow):
+    bb = lay.getchannel('A').getbbox()
+    if not bb:
+        return None
+    S = _3.S
+    pad = int(30 * S)
+    x0, y0 = max(0, bb[0] - pad), max(0, bb[1] - pad)
+    x1, y1 = min(lay.size[0], bb[2] + pad), min(lay.size[1], bb[3] + pad)
+    c = lay.crop((x0, y0, x1, y1))
+    A = c.getchannel('A')
+    g = c.convert('L').point(lambda v: int(40 + 0.84 * v))
+    col = ImageOps.colorize(g, black=(62, 22, 124), white=(238, 224, 255), mid=(152, 94, 242), blackpoint=40, whitepoint=255, midpoint=140)
+    if k < 1.0:
+        col = Image.blend(c.convert('RGB'), col, k)
+    col = col.convert('RGBA')
+    col.putalpha(A)
+    if glow:
+        sm = A.resize((max(2, A.size[0] // 4), max(2, A.size[1] // 4)), Image.BILINEAR).filter(ImageFilter.GaussianBlur(5)).resize(A.size, Image.BILINEAR)
+        gl = Image.new('RGBA', col.size, (178, 120, 255, 0))
+        gl.putalpha(sm.point(lambda v: int(v * 0.8)))
+        gl.alpha_composite(col)
+        col = gl
+    return col, x0, y0
+
+
+def _wrap(fn):
+    def g(ti, t):
+        modo = ESTILO['modo']
+        if not modo:
+            return fn(ti, t)
+        lay = Image.new('RGBA', ti.size, (0, 0, 0, 0))
+        fn(lay, t)
+        r = _tint(lay, 1.0 if modo == 'negro' else 0.55, modo == 'negro')
+        if r:
+            ti.alpha_composite(r[0], dest=(r[1], r[2]))
+    g._morado = True
+    return g
 
 
 def variar(job):
