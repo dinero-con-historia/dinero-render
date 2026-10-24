@@ -6,6 +6,8 @@ from motion6 import *
 from motion6 import frame, phrases_de, PLANTILLAS, PALETA, build_sfx, SR, W, H, FPS
 import motion7
 import fondos
+import estilo_morado
+estilo_morado.instalar()
 
 
 def _director():
@@ -18,7 +20,7 @@ def _director():
         import director
         job['escenas'] = director.autocompletar(job.get('escenas'), job.get('guion'), job.get('opciones'))
         try:
-            fondos.variar(job)
+            (estilo_morado.variar if (job.get('opciones') or {}).get('estilo') == 'morado' else fondos.variar)(job)
         except Exception as e:
             print('fondos fallo', e, file=sys.stderr)
         json.dump(job, open(p, 'w', encoding='utf-8'), ensure_ascii=False)
