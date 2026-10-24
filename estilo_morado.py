@@ -214,7 +214,7 @@ def _tint(lay, k, glow):
     c = lay.crop((x0, y0, x1, y1))
     A = c.getchannel('A')
     g = c.convert('L').point(lambda v: int(40 + 0.84 * v))
-    col = ImageOps.colorize(g, black=(62, 22, 124), white=(238, 224, 255), mid=(152, 94, 242), blackpoint=40, whitepoint=255, midpoint=140)
+    col = ImageOps.colorize(g, black=(100, 60, 182), white=(246, 238, 255), mid=(180, 136, 255), blackpoint=40, whitepoint=255, midpoint=140)
     if k < 1.0:
         col = Image.blend(c.convert('RGB'), col, k)
     col = col.convert('RGBA')
@@ -235,7 +235,7 @@ def _wrap(fn):
             return fn(ti, t)
         lay = Image.new('RGBA', ti.size, (0, 0, 0, 0))
         fn(lay, t)
-        r = _tint(lay, 1.0 if modo == 'negro' else 0.55, modo == 'negro')
+        r = _tint(lay, 1.0, True) if modo == 'negro' else (lay, 0, 0)
         if r:
             ti.alpha_composite(r[0], dest=(r[1], r[2]))
     g._morado = True
