@@ -53,7 +53,7 @@ LEX = [
     ('telefono', ('celular', 'telefono', 'movil', 'mensaje', 'app=', 'aplicacion', 'notifica', 'redes', 'llamada')),
     ('moneda', ('centavos', 'cambio=', 'moneda=')),
 ]
-PERS = ('gente', 'persona', 'personas', 'amigo', 'amiga', 'amigos', 'vecino', 'vecinos', 'familia', 'hombre', 'mujer', 'jefe', 'cliente', 'clientes', 'nino', 'padre', 'madre', 'hijo', 'hija', 'esposo', 'esposa', 'pareja', 'compan', 'trabajador', 'empleado', 'banquero', 'inversionista', 'estafador', 'abuelo', 'abuela', 'vendedor', 'tu=', 'usted', 'alguien', 'nadie', 'quien', 'otros', 'cualquiera')
+LEX_CUERPO = [('corazon', ('corazon', 'latid', 'cardi', 'arteria')), ('cerebro', ('cerebr', 'mentes', 'mente=', 'neurona', 'pensamiento', 'memoria')), ('ojo', ('ojos', 'ojo=', 'retina', 'vision')), ('hueso', ('hueso', 'esquelet', 'fractur')), ('craneo', ('craneo', 'calavera')), ('pulmon', ('pulmon', 'respir', 'oxigeno', 'aliento')), ('estomago', ('estomago', 'digest', 'intestin', 'hambre', 'comer=', 'comida')), ('adn', ('adn=', 'genes', 'genetic', 'cromosom')), ('celula', ('celula', 'tejido', 'organo')), ('bacteria', ('bacteri', 'microb')), ('virus', ('virus=', 'infecci', 'contagi')), ('microscopio', ('microscop', 'laboratorio', 'cientific', 'experiment', 'ciencia')), ('diente', ('diente', 'muela', 'dental')), ('gota', ('sangre', 'herida', 'sangr')), ('agua', ('agua', 'liquid', 'hidrat', 'beber', 'sudor', 'lagrim')), ('luna', ('dormir', 'duerm', 'sueno', 'insomnio', 'noche=', 'noches')), ('sol', ('sol=', 'solar', 'rayos')), ('arbol', ('arbol', 'bosque', 'planta=', 'plantas')), ('libro', ('libro', 'lectura', 'estudi')), ('taza', ('taza', 'cafe=', 'cafeina')), ('manzana', ('manzana', 'fruta', 'azucar', 'vitamina', 'dieta', 'verdura')), ('termometro', ('fiebre', 'temperatura', 'termometro')), ('pastilla', ('medicin', 'vacuna', 'pastilla', 'farmaco', 'medicament'))]; PERS = ('gente', 'persona', 'personas', 'amigo', 'amiga', 'amigos', 'vecino', 'vecinos', 'familia', 'hombre', 'mujer', 'jefe', 'cliente', 'clientes', 'nino', 'padre', 'madre', 'hijo', 'hija', 'esposo', 'esposa', 'pareja', 'compan', 'trabajador', 'empleado', 'banquero', 'inversionista', 'estafador', 'abuelo', 'abuela', 'vendedor', 'tu=', 'usted', 'alguien', 'nadie', 'quien', 'otros', 'cualquiera')
 FORMAL = ('banquero', 'jefe', 'empresa', 'ejecutivo', 'abogado', 'inversionista', 'director', 'ministro', 'rey', 'cientifico', 'fisico')
 STOPCAP = set(nm(x) for x in ('Año', 'Pero', 'Entonces', 'Si', 'Cuando', 'Y', 'El', 'La', 'Los', 'Las', 'Un', 'Una', 'Te', 'Tu', 'Tú', 'Ese', 'Esa', 'Esta', 'Este', 'Regla', 'Envíaselo', 'Sígueme', 'Guárdalo', 'Lo', 'Le', 'Les', 'Nadie', 'Todos', 'Cada', 'Hoy', 'Ayer', 'Mañana', 'Pero', 'Aquí', 'Ahí', 'Así', 'Solo', 'Sin', 'Con', 'Por', 'Para', 'Como', 'Que', 'Qué', 'Cómo', 'Por', 'Eso', 'Esto', 'Ahora', 'Después', 'Antes', 'Luego', 'Imagina', 'Mira', 'Piensa', 'Sabías', 'Esto', 'Dato', 'Primero', 'Segundo', 'Tercero', 'Vende', 'Vuelve', 'Dijo', 'Te', 'Tu', 'En', 'A', 'De', 'No', 'Sí', 'Hay', 'Fue', 'Era', 'Tenía', 'Había', 'Resultado', 'Moraleja', 'Conclusión', 'Atención', 'Ojo', 'Cuidado', 'Error', 'Verdad', 'Mentira', 'Mito', 'Realidad', 'Truco', 'Consejo', 'Dinero', 'Banco'))
 NEG = ('perd', 'error', 'miedo', 'cay', 'caid', 'quiebr', 'deuda', 'pobre', 'fracas', 'estaf', 'enga', 'robo', 'peligro', 'riesgo', 'cuidado', 'trampa', 'arruin', 'desplom', 'crisis', 'ignor', 'culpa', 'mal=', 'tragedia', 'pesadilla', 'perdi')
@@ -160,7 +160,7 @@ def dirigir_una(texto, st, es_primera=False, es_ultima=False):
     # objetos por palabra clave (orden de aparicion)
     objs = []
     for w, n in zip(words, nms):
-        for kind, stems in LEX:
+        for kind, stems in st.get('LEX', LEX):
             if stems and _hit(n, stems):
                 if kind not in [o[0] for o in objs]:
                     objs.append((kind, w))
@@ -268,7 +268,7 @@ def dirigir_una(texto, st, es_primera=False, es_ultima=False):
 def autocompletar(escenas, guion=None, opciones=None):
     # acepta: escenas con solo texto (se dirigen solas) o ya armadas (se respetan)
     st = {'names': set(), 'named': set(), 'named_pill': set(), 'looks': {}, 'prev_obj': None, 'prev_fondo': None, 'fi': 0}
-    st.update(opciones or {})
+    st.update(opciones or {}); st['LEX'] = (LEX_CUERPO + LEX) if st.get('lexico') == 'cuerpo' else (LEX + LEX_CUERPO)
     if guion and not escenas:
         txt = guion if isinstance(guion, str) else ' '.join(guion)
         partes = re.split('(?<=[.!?…])  *', txt.strip()) if isinstance(guion, str) else list(guion)
