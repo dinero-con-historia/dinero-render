@@ -52,7 +52,7 @@ def fondo_morado(kind):
         for j, y in enumerate(range(-sp, H + sp, sp)):
             for x in range(-sp, W + sp, sp):
                 xx = x + ox + (sp // 2 if j % 2 else 0)
-                d.ellipse([xx - 4, y + oy - 4, xx + 4, y + oy + 4], fill=(255, 255, 255, 16))
+                d.ellipse([xx - 4, y + oy - 4, xx + 4, y + oy + 4], fill=(255, 255, 255, 0))
         im = im.convert('RGBA')
         im.alpha_composite(ov)
         im = im.convert('RGB')
