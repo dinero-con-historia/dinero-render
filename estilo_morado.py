@@ -117,7 +117,7 @@ def fijar(sc):
     kind = str(sc.get('fondo') or '')
     modo = 'negro' if kind.startswith('mor:negro') else ('suave' if kind.startswith('mor:suave') else None)
     if modo != ESTILO['modo']:
-        ESTILO['modo'] = modo
+        ESTILO['modo'] = modo; _3.PT = () if modo else _3.PT
         try:
             _3._TILE.clear()
         except Exception:
