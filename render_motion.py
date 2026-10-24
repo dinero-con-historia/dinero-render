@@ -10,10 +10,11 @@ from multiprocessing import Pool
 import numpy as np
 
 import motion2 as M
+import sfx_suave
 
-GAP = 0.14
-MIN_DUR = 1.7
-TAIL = 0.9
+GAP = 0.06
+MIN_DUR = 1.1
+TAIL = 0.6
 PITCH = '+0Hz'
 SR = M.SR
 
@@ -79,6 +80,13 @@ def voz(job, work):
             print('TTS fallo', i, e, file=sys.stderr)
         if not os.path.exists(mp3) or os.path.getsize(mp3) < 500:
             raise RuntimeError('sin audio en escena %d' % i)
+        tr = os.path.join(work, 't%02d.mp3' % i)
+        try:
+            sh(['ffmpeg', '-y', '-i', mp3, '-af', 'areverse,silenceremove=start_periods=1:start_threshold=-42dB:start_silence=0.05,areverse', tr])
+            if os.path.exists(tr) and os.path.getsize(tr) > 500:
+                mp3 = tr
+        except Exception as e:
+            print('trim fallo', e, file=sys.stderr)
         d = dur_audio(mp3)
         dur = max(MIN_DUR, d + GAP) + (TAIL if i == len(escenas) - 1 else 0)
         sh(['ffmpeg', '-y', '-i', mp3, '-ar', str(SR), '-ac', '1', '-af', 'apad=whole_dur=%.3f' % dur, wav])
@@ -147,12 +155,12 @@ def main():
     mus = os.path.join(work, 'mus.wav')
     sfx = os.path.join(work, 'sfx.wav')
     musica(total, mus)
-    M.build_sfx(scenes, total, sfx)
+    sfx_suave.build_sfx(scenes, total, sfx)
     n = int((total + 1) * SR)
     mix = np.zeros(n)
     mix[:len(voice)] += voice[:n] * 1.0
     mx = leer_wav(mus)
-    mix[:len(mx)] += mx[:n] * 0.16
+    mix[:len(mx)] += mx[:n] * 0.0
     sx = leer_wav(sfx)
     mix[:len(sx)] += sx[:n] * 0.45
     mix = np.clip(mix / max(1.0, np.abs(mix).max()) * 0.92, -1, 1)
