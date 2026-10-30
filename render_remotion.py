@@ -103,6 +103,18 @@ def voz(job, work):
     return {'dur': round(t0, 3), 'words': palabras}
 
 
+def nivela_sfx():
+    # Deja todos los efectos al mismo nivel, bajo, para que nunca tapen la voz.
+    d = os.path.join(RM, 'public', 'sfx')
+    if not os.path.isdir(d):
+        return
+    for n in sorted(os.listdir(d)):
+        a = os.path.join(d, n)
+        t = a + '.tmp.mp3'
+        sh([FF, '-y', '-v', 'error', '-i', a, '-af', 'loudnorm=I=-24:TP=-6:LRA=7', '-ar', '44100', t])
+        os.replace(t, a)
+
+
 def main():
     job_path, out = sys.argv[1], os.path.abspath(sys.argv[2])
     job = json.load(open(job_path, encoding='utf-8'))
@@ -112,6 +124,7 @@ def main():
     work = os.path.join(os.path.dirname(out), 'work_rm_' + str(job.get('job_id', 'x')))
     os.makedirs(work, exist_ok=True)
     os.makedirs(os.path.join(RM, 'public'), exist_ok=True)
+    nivela_sfx()
     data = voz(job, work)
     json.dump(data, open(os.path.join(RM, 'public', 'palabras.json'), 'w', encoding='utf-8'), ensure_ascii=False)
     open(os.path.join(RM, 'src', 'Escena.tsx'), 'w', encoding='utf-8').write(tsx)
