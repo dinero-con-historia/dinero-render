@@ -4,7 +4,7 @@
 # se recorta el silencio final de cada escena y se deja la misma pausa (GAP/MIN_DUR/TAIL).
 # La escena (TSX) viene en escenas[i].p.remotion_tsx del job; si falta o falla, sale con error
 # y render.yml cae al motor anterior (render_motion.py).
-import asyncio, json, os, re, shutil, subprocess, sys, wave
+import asyncio, json, os, re, shutil, subprocess, sys, time, wave
 
 import unicodedata
 
@@ -48,6 +48,17 @@ async def _tts(texto, voz, rate, pitch, mp3):
     return ev
 
 
+def tts_seguro(texto, voz, rate, pitch, mp3):
+    # edge-tts a veces no devuelve audio: se reintenta antes de caer al motor anterior.
+    for n in range(4):
+        try:
+            return asyncio.run(_tts(texto, voz, rate, pitch, mp3))
+        except Exception:
+            if n == 3:
+                raise
+            time.sleep(5 * (n + 1))
+
+
 def alinea(texto, ev, d):
     # Palabras del texto (con su puntuación) con el tiempo de la voz; si no cuadran, reparte por largo.
     ws = texto.split()
@@ -74,7 +85,7 @@ def voz(job, work):
     lista, palabras, t0 = [], [], 0.0
     for i, sc in enumerate(escenas):
         mp3 = os.path.join(work, 'v%02d.mp3' % i)
-        ev = asyncio.run(_tts(sc['texto'], voz_n, rate, pitch, mp3))
+        ev = tts_seguro(sc['texto'], voz_n, rate, pitch, mp3)
         if not os.path.exists(mp3) or os.path.getsize(mp3) < 500:
             raise RuntimeError('sin audio en escena %d' % i)
         tr = os.path.join(work, 't%02d.mp3' % i)
@@ -115,12 +126,6 @@ def nivela_sfx():
         os.replace(t, a)
 
 
-def mide(rutas):
-    for a in rutas:
-        r = subprocess.run([FF, '-hide_banner', '-i', a, '-af', 'volumedetect', '-f', 'null', '-'], capture_output=True, text=True)
-        print('MED', os.path.basename(a), re.findall(r'(mean_volume|max_volume): (-?[0-9.]+)', r.stderr), flush=True)
-
-
 def main():
     job_path, out = sys.argv[1], os.path.abspath(sys.argv[2])
     job = json.load(open(job_path, encoding='utf-8'))
@@ -138,8 +143,6 @@ def main():
     if not os.path.isdir(os.path.join(RM, 'node_modules')):
         sh(['npm.cmd' if os.name == 'nt' else 'npm', 'ci', '--no-audit', '--no-fund'], cwd=RM)
     sh([npx, 'remotion', 'render', 'src/index.ts', 'Video', out, '--log=error'], cwd=RM)
-    sfx = os.path.join(RM, 'public', 'sfx')
-    mide([os.path.join(RM, 'public', 'voz.wav'), out] + [os.path.join(sfx, n) for n in sorted(os.listdir(sfx))])
     shutil.rmtree(work, ignore_errors=True)
     print('listo', out, data['dur'], 's')
 
