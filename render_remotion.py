@@ -115,6 +115,12 @@ def nivela_sfx():
         os.replace(t, a)
 
 
+def mide(rutas):
+    for a in rutas:
+        r = subprocess.run([FF, '-hide_banner', '-i', a, '-af', 'volumedetect', '-f', 'null', '-'], capture_output=True, text=True)
+        print('MED', os.path.basename(a), re.findall(r'(mean_volume|max_volume): (-?[0-9.]+)', r.stderr), flush=True)
+
+
 def main():
     job_path, out = sys.argv[1], os.path.abspath(sys.argv[2])
     job = json.load(open(job_path, encoding='utf-8'))
@@ -132,6 +138,8 @@ def main():
     if not os.path.isdir(os.path.join(RM, 'node_modules')):
         sh(['npm.cmd' if os.name == 'nt' else 'npm', 'ci', '--no-audit', '--no-fund'], cwd=RM)
     sh([npx, 'remotion', 'render', 'src/index.ts', 'Video', out, '--log=error'], cwd=RM)
+    sfx = os.path.join(RM, 'public', 'sfx')
+    mide([os.path.join(RM, 'public', 'voz.wav'), out] + [os.path.join(sfx, n) for n in sorted(os.listdir(sfx))])
     shutil.rmtree(work, ignore_errors=True)
     print('listo', out, data['dur'], 's')
 
