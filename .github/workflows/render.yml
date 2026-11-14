@@ -1,4 +1,5 @@
 name: DINERO render
+run-name: render ${{ inputs.job_id }}
 on:
   workflow_dispatch:
     inputs:
